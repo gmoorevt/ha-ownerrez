@@ -7,15 +7,13 @@ from typing import Any
 
 from ownerrez_wrapper import API
 
-from homeassistant.components.sensor import (
-    SensorDeviceClass,
-    SensorEntity,
-    SensorEntityDescription,
+from homeassistant.components.binary_sensor import (
+    BinarySensorDeviceClass,
+    BinarySensorEntity,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.typing import StateType
 from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
     DataUpdateCoordinator,
@@ -41,51 +39,47 @@ async def async_setup_entry(
 
     async def async_update_data():
         """Fetch data from API endpoint."""
-        is_booked = await hass.async_add_executor_job(
-            client.isunitbooked,
-            property_id
-        )
-        return {"is_booked": is_booked}
+        try:
+            is_booked = await hass.async_add_executor_job(
+                client.isunitbooked,
+                property_id
+            )
+            _LOGGER.debug("OwnerRez property %s booking status: %s", property_id, is_booked)
+            return {"is_booked": is_booked}
+        except Exception as err:
+            _LOGGER.error("Error fetching OwnerRez data: %s", err)
+            raise
 
     coordinator = DataUpdateCoordinator(
         hass,
         _LOGGER,
-        name="ownerrez",
+        name=f"ownerrez_{entry.entry_id}",
         update_method=async_update_data,
         update_interval=SCAN_INTERVAL,
     )
 
+    # Store the coordinator
+    hass.data[DOMAIN][entry.entry_id] = coordinator
+
     # Fetch initial data
     await coordinator.async_config_entry_first_refresh()
 
-    entities = [
-        OwnerRezPropertySensor(
-            coordinator,
-            entry,
-            SensorEntityDescription(
-                key="is_booked",
-                name="Is Property Booked",
-                icon="mdi:home-lock",
-            ),
-        ),
-    ]
-
-    async_add_entities(entities)
+    async_add_entities([OwnerRezPropertySensor(coordinator, entry)])
 
 
-class OwnerRezPropertySensor(CoordinatorEntity, SensorEntity):
+class OwnerRezPropertySensor(CoordinatorEntity, BinarySensorEntity):
     """Representation of an OwnerRez sensor."""
 
     def __init__(
         self,
         coordinator: DataUpdateCoordinator,
         config_entry: ConfigEntry,
-        description: SensorEntityDescription,
     ) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator)
-        self.entity_description = description
-        self._attr_unique_id = f"{config_entry.entry_id}_{description.key}"
+        self._attr_name = "Is Property Booked"
+        self._attr_unique_id = f"{config_entry.entry_id}_is_booked"
+        self._attr_device_class = BinarySensorDeviceClass.OCCUPANCY
         self._attr_device_info = {
             "identifiers": {(DOMAIN, config_entry.entry_id)},
             "name": f"OwnerRez Property {config_entry.data['property_id']}",
@@ -93,6 +87,11 @@ class OwnerRezPropertySensor(CoordinatorEntity, SensorEntity):
         }
 
     @property
-    def native_value(self) -> StateType:
-        """Return the state of the sensor."""
-        return self.coordinator.data.get(self.entity_description.key) 
+    def is_on(self) -> bool | None:
+        """Return true if the property is booked."""
+        return self.coordinator.data.get("is_booked") if self.coordinator.data else None
+
+    @property
+    def available(self) -> bool:
+        """Return True if entity is available."""
+        return self.coordinator.last_update_success 
