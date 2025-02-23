@@ -100,18 +100,6 @@ async def async_setup_entry(
                         "guest_email": guest.email,
                         "guest_phone": guest.phone
                     })
-                else:
-                    data.update({
-                        "guest_name": None,
-                        "guest_email": None,
-                        "guest_phone": None
-                    })
-            else:
-                data.update({
-                    "guest_name": None,
-                    "guest_email": None,
-                    "guest_phone": None
-                })
             
             _LOGGER.debug("OwnerRez property %s data: %s", property_id, data)
             return data
@@ -134,10 +122,17 @@ async def async_setup_entry(
     # Fetch initial data
     await coordinator.async_config_entry_first_refresh()
 
-    entities = [
-        OwnerRezPropertySensor(coordinator, entry, description)
-        for description in SENSORS
-    ]
+    entities = []
+    
+    # Add the is_booked sensor
+    entities.append(OwnerRezPropertySensor(coordinator, entry, SENSORS[0]))
+    
+    # Only add guest info sensors if property is booked
+    if coordinator.data.get("is_booked") == "Yes":
+        entities.extend([
+            OwnerRezPropertySensor(coordinator, entry, description)
+            for description in SENSORS[1:]  # Skip the is_booked sensor
+        ])
     
     async_add_entities(entities)
 
@@ -160,6 +155,17 @@ class OwnerRezPropertySensor(CoordinatorEntity, SensorEntity):
             "name": f"OwnerRez Property {config_entry.data['property_id']}",
             "manufacturer": "OwnerRez",
         }
+
+    @property
+    def available(self) -> bool:
+        """Return True if entity is available."""
+        if self.entity_description.key == "is_booked":
+            return self.coordinator.last_update_success
+        return (
+            self.coordinator.last_update_success
+            and self.coordinator.data.get("is_booked") == "Yes"
+            and self.coordinator.data.get(self.entity_description.key) is not None
+        )
 
     @property
     def native_value(self) -> StateType:
