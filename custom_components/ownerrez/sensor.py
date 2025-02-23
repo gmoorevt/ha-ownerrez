@@ -3,17 +3,18 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 import logging
-from typing import Any, Mapping
+from typing import Any
 
 from ownerrez_wrapper import API
 
-from homeassistant.components.binary_sensor import (
-    BinarySensorDeviceClass,
-    BinarySensorEntity,
+from homeassistant.components.sensor import (
+    SensorEntity,
+    SensorEntityDescription,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.typing import StateType
 from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
     DataUpdateCoordinator,
@@ -24,6 +25,29 @@ from . import DOMAIN
 _LOGGER = logging.getLogger(__name__)
 
 SCAN_INTERVAL = timedelta(minutes=5)
+
+SENSORS = [
+    SensorEntityDescription(
+        key="is_booked",
+        name="Is Property Booked",
+        icon="mdi:home-lock",
+    ),
+    SensorEntityDescription(
+        key="guest_name",
+        name="Guest Name",
+        icon="mdi:account",
+    ),
+    SensorEntityDescription(
+        key="guest_email",
+        name="Guest Email",
+        icon="mdi:email",
+    ),
+    SensorEntityDescription(
+        key="guest_phone",
+        name="Guest Phone",
+        icon="mdi:phone",
+    ),
+]
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -46,7 +70,7 @@ async def async_setup_entry(
                 property_id
             )
             
-            data = {"is_booked": is_booked}
+            data = {"is_booked": "Yes" if is_booked else "No"}
             
             # If booked, get guest information
             if is_booked:
@@ -76,6 +100,18 @@ async def async_setup_entry(
                         "guest_email": guest.email,
                         "guest_phone": guest.phone
                     })
+                else:
+                    data.update({
+                        "guest_name": None,
+                        "guest_email": None,
+                        "guest_phone": None
+                    })
+            else:
+                data.update({
+                    "guest_name": None,
+                    "guest_email": None,
+                    "guest_phone": None
+                })
             
             _LOGGER.debug("OwnerRez property %s data: %s", property_id, data)
             return data
@@ -98,22 +134,27 @@ async def async_setup_entry(
     # Fetch initial data
     await coordinator.async_config_entry_first_refresh()
 
-    async_add_entities([OwnerRezPropertySensor(coordinator, entry)])
+    entities = [
+        OwnerRezPropertySensor(coordinator, entry, description)
+        for description in SENSORS
+    ]
+    
+    async_add_entities(entities)
 
 
-class OwnerRezPropertySensor(CoordinatorEntity, BinarySensorEntity):
+class OwnerRezPropertySensor(CoordinatorEntity, SensorEntity):
     """Representation of an OwnerRez sensor."""
 
     def __init__(
         self,
         coordinator: DataUpdateCoordinator,
         config_entry: ConfigEntry,
+        description: SensorEntityDescription,
     ) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator)
-        self._attr_name = "Is Property Booked"
-        self._attr_unique_id = f"{config_entry.entry_id}_is_booked"
-        self._attr_device_class = BinarySensorDeviceClass.OCCUPANCY
+        self.entity_description = description
+        self._attr_unique_id = f"{config_entry.entry_id}_{description.key}"
         self._attr_device_info = {
             "identifiers": {(DOMAIN, config_entry.entry_id)},
             "name": f"OwnerRez Property {config_entry.data['property_id']}",
@@ -121,23 +162,6 @@ class OwnerRezPropertySensor(CoordinatorEntity, BinarySensorEntity):
         }
 
     @property
-    def is_on(self) -> bool | None:
-        """Return true if the property is booked."""
-        return self.coordinator.data.get("is_booked") if self.coordinator.data else None
-
-    @property
-    def available(self) -> bool:
-        """Return True if entity is available."""
-        return self.coordinator.last_update_success
-
-    @property
-    def extra_state_attributes(self) -> Mapping[str, Any] | None:
-        """Return entity specific state attributes."""
-        if not self.coordinator.data or not self.coordinator.data.get("is_booked"):
-            return None
-            
-        return {
-            "guest_name": self.coordinator.data.get("guest_name"),
-            "guest_email": self.coordinator.data.get("guest_email"),
-            "guest_phone": self.coordinator.data.get("guest_phone")
-        } 
+    def native_value(self) -> StateType:
+        """Return the state of the sensor."""
+        return self.coordinator.data.get(self.entity_description.key) if self.coordinator.data else None 
