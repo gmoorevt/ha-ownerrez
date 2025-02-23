@@ -16,7 +16,7 @@ This custom integration for Home Assistant allows you to monitor the booking sta
 2. Click on "Integrations"
 3. Click the three dots in the top right
 4. Select "Custom repositories"
-5. Add this repository URL and select "Integration" as the category
+5. Add `https://github.com/gmoorevt/ha-ownerrez` and select "Integration" as the category
 6. Click "Add"
 7. Find "OwnerRez" in the integration list and click "Download"
 8. Restart Home Assistant
