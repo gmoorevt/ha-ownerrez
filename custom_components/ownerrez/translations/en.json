@@ -1,0 +1,22 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "data": {
+                    "username": "Username",
+                    "token": "API Token",
+                    "property_id": "Property ID"
+                },
+                "description": "Please enter your OwnerRez credentials and property information.",
+                "title": "OwnerRez Setup"
+            }
+        },
+        "error": {
+            "invalid_auth": "Invalid authentication credentials",
+            "unknown": "Unexpected error occurred"
+        },
+        "abort": {
+            "already_configured": "Device is already configured"
+        }
+    }
+} 
